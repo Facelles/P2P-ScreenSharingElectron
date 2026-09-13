@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: electron-host
+productName: P2PLovers
 directories:
   buildResources: build
 files:
@@ -13,7 +13,7 @@ extraResources:
   - from: resources/
     to: .
 win:
-  executableName: electron-host
+  executableName: P2PLovers
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

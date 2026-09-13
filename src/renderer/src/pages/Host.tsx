@@ -442,11 +442,13 @@ export default function Host() {
     // @ts-ignore
     if (window.electron && window.electron.ipcRenderer) {
       // @ts-ignore
+      window.electron.ipcRenderer.removeAllListeners('widget-action');
+      // @ts-ignore
       window.electron.ipcRenderer.on('widget-action', handleWidgetAction);
 
       return () => {
         // @ts-ignore
-        window.electron.ipcRenderer.removeListener('widget-action', handleWidgetAction);
+        window.electron.ipcRenderer.removeAllListeners('widget-action');
       };
     }
     return undefined;
@@ -511,11 +513,6 @@ export default function Host() {
 
         {/* Header */}
         <div className="flex flex-col relative gap-1">
-          <button onClick={() => { stopSharing(); navigate('?page=home'); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/15 transition-colors rounded-xl text-white/70 text-xs font-medium border border-white/5 w-fit cursor-pointer active:scale-95 mb-2">
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            На головну
-          </button>
           <h2 className="text-xl font-bold tracking-tight">🖥 Трансляція хоста</h2>
           <span className={`flex items-center gap-2 text-sm font-medium ${sc.text}`}>
             <span className={`w-2 h-2 rounded-full ${sc.dot} pulse-dot`} />
@@ -606,6 +603,11 @@ export default function Host() {
           </div>
         )}
       </div>
+      <button onClick={() => { stopSharing(); navigate('?page=home'); }}
+        className="absolute top-6 left-6 z-50 flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 transition-colors rounded-xl text-white/90 text-xs font-medium border border-white/20 backdrop-blur-md cursor-pointer active:scale-95 shadow-xl">
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        На головну
+      </button>
     </div>
   );
 }

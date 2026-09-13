@@ -407,15 +407,6 @@ export default function Viewer({ token }: Props) {
 
         {/* Top Left: Stats */}
         <div className="flex flex-col gap-2 pointer-events-auto items-start">
-          <button onClick={() => {
-              if (pcRef.current) pcRef.current.close();
-              if (socketRef.current) socketRef.current.disconnect();
-              navigate('?page=home');
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 transition-colors rounded-xl text-white/80 text-xs font-medium border border-white/5 backdrop-blur-sm w-fit mb-1 cursor-pointer active:scale-95 shadow-lg">
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Вийти
-          </button>
 
           {status === 'playing' && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full w-fit">
@@ -502,6 +493,16 @@ export default function Viewer({ token }: Props) {
           {micError}
         </div>
       )}
+      {/* Global Back Button */}
+      <button onClick={() => {
+          if (pcRef.current) pcRef.current.close();
+          if (socketRef.current) socketRef.current.disconnect();
+          navigate('?page=home');
+        }}
+        className="absolute top-6 left-6 z-50 flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 transition-colors rounded-xl text-white/90 text-xs font-medium border border-white/20 backdrop-blur-md cursor-pointer active:scale-95 shadow-xl">
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        На головну
+      </button>
     </div>
   );
 }
