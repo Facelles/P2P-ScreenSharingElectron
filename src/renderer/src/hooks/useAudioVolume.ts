@@ -9,7 +9,7 @@ interface UseAudioVolumeOptions {
 export function useAudioVolume({
   stream,
   threshold = 10,
-  intervalMs = 50,
+  intervalMs = 150, // reduced from 50ms → 150ms to lower CPU usage
 }: UseAudioVolumeOptions) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -26,8 +26,8 @@ export function useAudioVolume({
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.5;
+      analyser.fftSize = 64; // reduced from 256 → 64 (4× less FFT work per frame)
+      analyser.smoothingTimeConstant = 0.6;
 
       const source = audioCtx.createMediaStreamSource(stream);
       source.connect(analyser);
@@ -45,14 +45,16 @@ export function useAudioVolume({
 
     const checkVolume = () => {
       if (!analyserRef.current) return;
-      
+      // Skip analysis when page is hidden (Electron background) to save CPU
+      if (document.hidden) return;
+
       analyserRef.current.getByteFrequencyData(dataArray);
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) {
         sum += dataArray[i];
       }
       const average = sum / dataArray.length;
-      
+
       setIsSpeaking(average > threshold);
     };
 
