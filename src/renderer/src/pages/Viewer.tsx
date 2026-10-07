@@ -12,7 +12,7 @@ const MIC_CONSTRAINTS: MediaStreamConstraints = {
   audio: {
     echoCancellation: true,
     noiseSuppression: true,
-    autoGainControl: true,
+    autoGainControl: false, // вимкнено — конфліктує з GainNode і створює білий шум
   },
   video: false,
 };
@@ -25,6 +25,7 @@ export default function Viewer({ token }: Props) {
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const micSenderRef = useRef<RTCRtpSender | null>(null);
+  const micAudioCtxRef = useRef<AudioContext | null>(null);
 
   const [status, setStatus] = useState<Status>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
@@ -70,6 +71,9 @@ export default function Viewer({ token }: Props) {
     if (status !== 'playing') return;
     let lastBytes = 0;
     const id = setInterval(async () => {
+      // Skip heavy getStats() calls when the window is hidden / minimized
+      if (document.hidden) return;
+
       const stats = await pcRef.current?.getStats();
       stats?.forEach((r) => {
         if (r.type === 'inbound-rtp' && r.kind === 'video') {
@@ -84,7 +88,7 @@ export default function Viewer({ token }: Props) {
           if (rtt != null) setLatencyMs(Math.round(rtt * 1000));
         }
       });
-    }, 1000);
+    }, 2000); // 2s is enough for a display-only HUD, was 1000ms
     return () => clearInterval(id);
   }, [status]);
 
@@ -192,6 +196,7 @@ export default function Viewer({ token }: Props) {
       socket.disconnect();
       pcRef.current?.close();
       micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      micAudioCtxRef.current?.close().catch(() => {});
     };
   }, [token]);
 
@@ -228,10 +233,32 @@ export default function Viewer({ token }: Props) {
           const micStream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
           micStreamRef.current = micStream;
           setLocalMicStream(micStream);
-          const micTrack = micStream.getAudioTracks()[0];
+
+          // ── Boost mic volume via GainNode + Compressor ───────────────
+          const audioCtx = new AudioContext();
+          micAudioCtxRef.current = audioCtx;
+          const source = audioCtx.createMediaStreamSource(micStream);
+
+          const gainNode = audioCtx.createGain();
+          gainNode.gain.value = 2.0; // 2× boost — підніми до 2.5 якщо тихо
+
+          // Компресор прибирає піки і не дає спотворень після підсилення
+          const compressor = audioCtx.createDynamicsCompressor();
+          compressor.threshold.value = -24; // дБ — починаємо стискати з -24dB
+          compressor.knee.value = 10;       // м'який перехід
+          compressor.ratio.value = 4;       // 4:1 — помірне стискання
+          compressor.attack.value = 0.005;  // 5ms — швидка реакція
+          compressor.release.value = 0.15;  // 150ms — плавне відпускання
+
+          const destination = audioCtx.createMediaStreamDestination();
+          source.connect(gainNode);
+          gainNode.connect(compressor);
+          compressor.connect(destination);
+          const boostedTrack = destination.stream.getAudioTracks()[0];
+          // ──────────────────────────────────────────────────────────────
 
           if (pcRef.current) {
-            micSenderRef.current = pcRef.current.addTrack(micTrack, micStream);
+            micSenderRef.current = pcRef.current.addTrack(boostedTrack, destination.stream);
             try {
               const offer = await pcRef.current.createOffer();
               await pcRef.current.setLocalDescription(offer);
