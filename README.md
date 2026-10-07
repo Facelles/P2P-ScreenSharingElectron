@@ -11,16 +11,16 @@ Native macOS Host application for the P2PLovers screen sharing platform. Runs as
 │                        MONOREPO                             │
 │                  video-trlanslator/                         │
 │                                                             │
-│  ┌──────────────────┐   WebRTC (P2P)   ┌─────────────────┐ │
-│  │    P2PLovers     │ ◄──────────────► │   frontend/     │ │
-│  │  (this package)  │                  │  (React Viewer) │ │
-│  │                  │                  └─────────────────┘ │
-│  │  Electron + Vite │         ▲                 ▲          │
-│  │  React + NutJS   │         │   Socket.io     │          │
-│  └──────────────────┘         │   signaling     │          │
-│                               ▼                 │          │
-│                    ┌─────────────────┐          │          │
-│                    │    backend/     │──────────┘          │
+│  ┌──────────────────┐   WebRTC (P2P)   ┌─────────────────┐  │
+│  │    P2PLovers     │ ◄──────────────► │   frontend/     │  │
+│  │  (this package)  │                  │  (React Viewer) │  │
+│  │                  │                  └─────────────────┘  │
+│  │  Electron + Vite │         ▲                 ▲           │
+│  │  React + NutJS   │         │   Socket.io     │           │
+│  └──────────────────┘         │   signaling     │           │
+│                               ▼                 │           │ 
+│                    ┌─────────────────┐          │           │
+│                    │    backend/     │──────────┘           │
 │                    │  Node.js +      │                      │
 │                    │  Socket.io      │                      │
 │                    │  (Render.com)   │                      │
