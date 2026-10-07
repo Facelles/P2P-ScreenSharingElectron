@@ -232,7 +232,6 @@ export default function Viewer({ token }: Props) {
         try {
           const micStream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
           micStreamRef.current = micStream;
-          setLocalMicStream(micStream);
 
           // ── Boost mic volume via GainNode + Compressor ───────────────
           const audioCtx = new AudioContext();
@@ -256,6 +255,8 @@ export default function Viewer({ token }: Props) {
           compressor.connect(destination);
           const boostedTrack = destination.stream.getAudioTracks()[0];
           // ──────────────────────────────────────────────────────────────
+          // Pass boosted stream to indicator so it reflects real TX volume
+          setLocalMicStream(destination.stream);
 
           if (pcRef.current) {
             micSenderRef.current = pcRef.current.addTrack(boostedTrack, destination.stream);
