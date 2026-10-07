@@ -143,6 +143,7 @@ app.whenReady().then(() => {
 
   // --- NATIVE PYTHON OVERLAY ---
   let overlayProcess: ChildProcess | null = null
+  let isOverlayStarting = false
 
   const overlayScript = is.dev
     ? join(app.getAppPath(), 'resources/overlay.py')
@@ -151,8 +152,9 @@ app.whenReady().then(() => {
   console.log('[overlay] script path:', overlayScript)
 
   ipcMain.on('create-widget', () => {
-    console.log('[overlay] create-widget called, overlayProcess:', !!overlayProcess)
-    if (overlayProcess) return
+    console.log('[overlay] create-widget called, overlayProcess:', !!overlayProcess, 'isOverlayStarting:', isOverlayStarting)
+    if (overlayProcess || isOverlayStarting) return
+    isOverlayStarting = true
 
     console.log('[overlay] spawning', overlayScript)
     if (is.dev) {
@@ -161,6 +163,7 @@ app.whenReady().then(() => {
       overlayProcess = spawn(overlayScript, [], { stdio: ['pipe', 'pipe', 'pipe'] })
     }
     console.log('[overlay] spawned pid:', overlayProcess.pid)
+    isOverlayStarting = false
 
     const fs = require('fs')
     const logFile = fs.createWriteStream('/tmp/overlay.log', { flags: 'a' })
@@ -187,6 +190,7 @@ app.whenReady().then(() => {
       logFile.write(`[EXIT] ${code}\n`)
       console.log('[overlay] process closed with code:', code)
       overlayProcess = null
+      isOverlayStarting = false
     })
   })
 
