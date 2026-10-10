@@ -26,6 +26,10 @@ export default function Viewer({ token }: Props) {
   const micStreamRef = useRef<MediaStream | null>(null);
   const micSenderRef = useRef<RTCRtpSender | null>(null);
   const micAudioCtxRef = useRef<AudioContext | null>(null);
+  // Keep reference to the boosted track so it can be re-added to a new PC
+  // when the host reconnects and sends a fresh offer.
+  const boostedTrackRef = useRef<MediaStreamTrack | null>(null);
+  const boostedStreamRef = useRef<MediaStream | null>(null);
 
   const [status, setStatus] = useState<Status>('connecting');
   const [errorMsg, setErrorMsg] = useState('');
@@ -118,60 +122,69 @@ export default function Viewer({ token }: Props) {
     });
 
     socket.on('offer', async ({ sdp }: { sdp: RTCSessionDescriptionInit }) => {
-      const createPeerConnection = () => {
-        if (pcRef.current) {
-          pcRef.current.close();
-        }
-        const newPc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
-        pcRef.current = newPc;
-        return newPc;
-      };
-
-      const pc = createPeerConnection();
+      // Close the old PeerConnection and create a fresh one
+      if (pcRef.current) pcRef.current.close();
+      const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
+      pcRef.current = pc;
 
       pc.ondatachannel = (event) => {
         dataChannelRef.current = event.channel;
       };
 
-        pc.ontrack = (event) => {
-          const streamId = event.streams[0]?.id || '';
-          if (event.track.kind === 'video') {
-            videoStreamIdRef.current = streamId;
-            const stream = new MediaStream([event.track]);
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-              setStatus('playing');
+      pc.ontrack = (event) => {
+        const streamId = event.streams[0]?.id || '';
+        if (event.track.kind === 'video') {
+          videoStreamIdRef.current = streamId;
+          const stream = new MediaStream([event.track]);
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            setStatus('playing');
+          }
+        } else if (event.track.kind === 'audio') {
+          setRemoteAudioTracks(prev => [...prev, { track: event.track, streamId }]);
+        }
+      };
+
+      pc.onicecandidate = ({ candidate }) => {
+        if (candidate) socket.emit('ice_candidate', { candidate });
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (!pc) return;
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          setStatus('host_left');
+          setRemoteMicStream(null);
+          setRemoteAudioTracks([]);
+          // Auto-reconnect WebRTC after a short delay
+          setTimeout(() => {
+            if (socketRef.current?.connected) {
+              console.log('[viewer] Attempting WebRTC auto-reconnect...');
+              socketRef.current.emit('join_room', { token });
             }
-          } else if (event.track.kind === 'audio') {
-            setRemoteAudioTracks(prev => [...prev, { track: event.track, streamId }]);
-          }
-        };
-
-        pc.onicecandidate = ({ candidate }) => {
-          if (candidate) socket.emit('ice_candidate', { candidate });
-        };
-
-        pc.onconnectionstatechange = () => {
-          if (!pc) return;
-          if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-            setStatus('host_left');
-            setRemoteMicStream(null);
-            setRemoteAudioTracks([]);
-
-            // Auto-reconnect WebRTC after a short delay
-            setTimeout(() => {
-              if (socketRef.current?.connected) {
-                console.log('Attempting auto-reconnect...');
-                socketRef.current.emit('join_room', { token });
-              }
-            }, 2500);
-          }
-        };
+          }, 2500);
+        }
+      };
 
       await pc.setRemoteDescription(sdp);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit('answer', { sdp: pc.localDescription });
+
+      // ── FIX: Re-attach viewer mic to the new PC after host reconnect ────
+      // If the viewer had their mic on before the host reconnected, the old
+      // sender was on the closed PC. We must add the track to the new PC and
+      // trigger a new renegotiation so the host can hear the viewer again.
+      if (boostedTrackRef.current && boostedStreamRef.current) {
+        try {
+          micSenderRef.current = pc.addTrack(boostedTrackRef.current, boostedStreamRef.current);
+          const micOffer = await pc.createOffer();
+          await pc.setLocalDescription(micOffer);
+          socket.emit('viewer_offer', { sdp: pc.localDescription });
+          console.log('[viewer] re-attached mic track to new PC after host reconnect');
+        } catch (e) {
+          console.error('[viewer] failed to re-attach mic track:', e);
+        }
+      }
     });
 
     socket.on('ice_candidate', async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
@@ -255,6 +268,9 @@ export default function Viewer({ token }: Props) {
           compressor.connect(destination);
           const boostedTrack = destination.stream.getAudioTracks()[0];
           // ──────────────────────────────────────────────────────────────
+          // Store refs so the track can be re-added to a new PC on reconnect
+          boostedTrackRef.current  = boostedTrack;
+          boostedStreamRef.current = destination.stream;
           // Pass boosted stream to indicator so it reflects real TX volume
           setLocalMicStream(destination.stream);
 
@@ -263,6 +279,7 @@ export default function Viewer({ token }: Props) {
             try {
               const offer = await pcRef.current.createOffer();
               await pcRef.current.setLocalDescription(offer);
+              // Server buffers this offer if host is temporarily offline
               socketRef.current?.emit('viewer_offer', { sdp: pcRef.current.localDescription });
             } catch {}
           }
