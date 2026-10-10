@@ -1,5 +1,22 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+
+// ── Error Boundary ─────────────────────────────────────────────────────────
+class HostErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: Error | null}> {
+  state = { hasError: false, error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('Host Error:', error, info); }
+  render() {
+    if (this.state.hasError) return (
+      <div className="flex h-screen w-screen items-center justify-center bg-gray-950 text-red-500 flex-col gap-4">
+        <h2 className="text-xl font-bold">Упс, щось пішло не так!</h2>
+        <p className="text-sm opacity-80">{this.state.error?.message}</p>
+        <button className="px-4 py-2 bg-red-500/20 hover:bg-red-500/40 rounded-lg text-white" onClick={() => window.location.reload()}>Оновити сторінку</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 import { io, Socket } from 'socket.io-client';
 import { navigate } from '../App';
 import { HostHud } from '../components/host/HostHud';
@@ -53,7 +70,7 @@ export default function Host() {
   const [sharing, setSharing] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [shareLink, setShareLink] = useState('');
-  const tokenRef = useRef<string | null>(null);
+  const tokenRef = useRef<string | null>(sessionStorage.getItem('host_room_token'));
   const [copied, setCopied] = useState(false);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
 
@@ -178,6 +195,7 @@ export default function Host() {
     streamRef.current = null;
     pcRef.current?.close();
     pcRef.current = null;
+    socketRef.current?.emit('close_room');
     setSharing(false);
     setStatus('stopped');
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -317,6 +335,7 @@ export default function Host() {
 
     socket.on('room_created', ({ token }: { token: string }) => {
       tokenRef.current = token;
+      sessionStorage.setItem('host_room_token', token);
       const viewerBase = import.meta.env.VITE_VIEWER_URL ?? window.location.origin;
       setShareLink(`${viewerBase}/?page=viewer&token=${token}`);
       setStatus('waiting');
@@ -489,7 +508,7 @@ export default function Host() {
     setAllowKeyboard,
   };
 
-  return (
+  const renderContent = () => (
     <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-6 gap-5 mac-drag-region">
       {/* We mute the audio element because we are playing it via Web Audio API GainNode instead */}
       <audio ref={viewerAudioRef} autoPlay playsInline muted={true} />
@@ -610,4 +629,6 @@ export default function Host() {
       </button>
     </div>
   );
+
+  return <HostErrorBoundary>{renderContent()}</HostErrorBoundary>;
 }

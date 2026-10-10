@@ -1,5 +1,22 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, Component, ErrorInfo, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
+
+// ── Error Boundary ─────────────────────────────────────────────────────────
+class ViewerErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: Error | null}> {
+  state = { hasError: false, error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('Viewer Error:', error, info); }
+  render() {
+    if (this.state.hasError) return (
+      <div className="flex h-screen w-screen items-center justify-center bg-gray-950 text-red-500 flex-col gap-4">
+        <h2 className="text-xl font-bold">Упс, щось пішло не так!</h2>
+        <p className="text-sm opacity-80">{this.state.error?.message}</p>
+        <button className="px-4 py-2 bg-red-500/20 hover:bg-red-500/40 rounded-lg text-white" onClick={() => window.location.reload()}>Оновити сторінку</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 import { navigate } from '../App';
 import { SERVER_URL, STUN_SERVERS, ACCESS_PASSWORD } from '../config';
 import { useAudioVolume } from '../hooks/useAudioVolume';
@@ -122,6 +139,9 @@ export default function Viewer({ token }: Props) {
     });
 
     socket.on('offer', async ({ sdp }: { sdp: RTCSessionDescriptionInit }) => {
+      // Clear old tracks to prevent accumulation on reconnects
+      setRemoteAudioTracks([]);
+
       // Close the old PeerConnection and create a fresh one
       if (pcRef.current) pcRef.current.close();
       const pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
@@ -281,11 +301,22 @@ export default function Viewer({ token }: Props) {
               await pcRef.current.setLocalDescription(offer);
               // Server buffers this offer if host is temporarily offline
               socketRef.current?.emit('viewer_offer', { sdp: pcRef.current.localDescription });
-            } catch {}
+              setMicOn(true);
+            } catch (err) {
+              console.error('Failed to negotiate mic offer:', err);
+              setMicError('Не вдалося надіслати запит на мікрофон.');
+              // Rollback
+              pcRef.current.removeTrack(micSenderRef.current);
+              micSenderRef.current = null;
+              boostedTrack.enabled = false;
+              setMicOn(false);
+            }
+          } else {
+             setMicOn(true); // if no PC yet, just turn it on locally
           }
-          setMicOn(true);
         } catch {
           setMicError('Немає доступу до мікрофона.');
+          setMicOn(false);
         }
       }
     }
@@ -403,7 +434,7 @@ export default function Viewer({ token }: Props) {
     };
   }, []);
 
-  return (
+  const renderContent = () => (
     <div ref={containerRef} className="relative w-full h-screen bg-black overflow-hidden group"
       onMouseMove={revealHud} onClick={revealHud} onTouchStart={revealHud}>
 
@@ -550,4 +581,6 @@ export default function Viewer({ token }: Props) {
       </button>
     </div>
   );
+
+  return <ViewerErrorBoundary>{renderContent()}</ViewerErrorBoundary>;
 }

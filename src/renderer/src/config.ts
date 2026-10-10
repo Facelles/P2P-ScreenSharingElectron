@@ -5,6 +5,17 @@ export const ACCESS_PASSWORD = import.meta.env.VITE_ACCESS_PASSWORD ?? '';
 export const STUN_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  // Open Relay / Free TURN
+  {
+    urls: 'turn:openrelay.metered.ca:80',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  }
 ];
 
 /** Target start bitrate for video sender (bits/s) */
